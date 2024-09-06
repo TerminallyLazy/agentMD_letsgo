@@ -4,10 +4,53 @@ document.addEventListener('DOMContentLoaded', function() {
     const terminalOutput = document.getElementById('terminalOutput');
     const terminalInput = document.getElementById('terminalInput');
     const closeTerminal = document.getElementById('closeTerminal');
+    const startVoiceButton = document.getElementById('startVoice');
+    const stopVoiceButton = document.getElementById('stopVoice');
     let isProcessing = false;
+    let recognition;
+    let synthesis;
 
     // Initialize connection with background script
     const port = chrome.runtime.connect({name: "popup"});
+
+    // Initialize Web Speech API
+    function initSpeechRecognition() {
+        recognition = new webkitSpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+
+        recognition.onresult = function(event) {
+            const result = event.results[event.results.length - 1];
+            if (result.isFinal) {
+                const command = result[0].transcript;
+                terminalInput.value = command;
+                sendCommand(command);
+            }
+        };
+
+        recognition.onerror = function(event) {
+            console.error('Speech recognition error:', event.error);
+        };
+    }
+
+    function initSpeechSynthesis() {
+        synthesis = window.speechSynthesis;
+    }
+
+    initSpeechRecognition();
+    initSpeechSynthesis();
+
+    startVoiceButton.addEventListener('click', function() {
+        recognition.start();
+        startVoiceButton.disabled = true;
+        stopVoiceButton.disabled = false;
+    });
+
+    stopVoiceButton.addEventListener('click', function() {
+        recognition.stop();
+        startVoiceButton.disabled = false;
+        stopVoiceButton.disabled = true;
+    });
 
     summarizeLabResults.addEventListener('click', function() {
         terminalModal.style.display = 'block';
@@ -30,52 +73,56 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-// Remove pollForUpdates function as it's no longer needed
-// Message listening will be handled in the Chrome extension message listener
-
-function sendCommand(command) {
-    console.log("DEBUG: Sending command:", command);
-    chrome.runtime.sendMessage({ action: 'sendCommand', command: command }, (response) => {
-        if (chrome.runtime.lastError) {
-            handleResponse({ error: 'Failed to send command: ' + chrome.runtime.lastError.message });
-        } else {
-            handleResponse({ result: response.output });
-        }
-    });
-}
-
-terminalInput.addEventListener('keypress', function(event) {
-    if (event.key === 'Enter') {
-        const command = terminalInput.value;
-        terminalOutput.innerHTML += `<div class="user-input">> ${command}</div>`;
-        terminalInput.value = '';
-        isProcessing = true;
-        chrome.runtime.sendMessage({ action: 'sendCommand', command: command }, function(response) {
-            handleResponse(response);
+    function sendCommand(command) {
+        console.log("DEBUG: Sending command:", command);
+        chrome.runtime.sendMessage({ action: 'sendCommand', command: command }, (response) => {
+            if (chrome.runtime.lastError) {
+                handleResponse({ error: 'Failed to send command: ' + chrome.runtime.lastError.message });
+            } else {
+                handleResponse({ result: response.output });
+            }
         });
     }
-});
 
-function handleResponse(response) {
-    if (response.error) {
-        console.error(response.error);
-        terminalOutput.innerHTML += `<div class="error">Error: ${response.error}</div>`;
-    } else {
-        console.log("DEBUG: Received response:", response.result);
-        try {
-            const jsonResponse = typeof response.result === 'string' ? JSON.parse(response.result) : response.result;
-            const formattedJson = JSON.stringify(jsonResponse, null, 2);
-            terminalOutput.innerHTML += `<div class="agent-response"><pre>${formattedJson}</pre></div>`;
-        } catch (e) {
-            console.log("DEBUG: Received response:", response.result);
-            terminalOutput.innerHTML += `<div class="agent-response">${response.result.replace(/\n/g, ' ').replace(/\s+/g, ' ')}</div>`;
+    terminalInput.addEventListener('keypress', function(event) {
+        if (event.key === 'Enter') {
+            const command = terminalInput.value;
+            terminalOutput.innerHTML += `<div class="user-input">> ${command}</div>`;
+            terminalInput.value = '';
+            isProcessing = true;
+            sendCommand(command);
         }
+    });
+
+    function handleResponse(response) {
+        if (response.error) {
+            console.error(response.error);
+            terminalOutput.innerHTML += `<div class="error">Error: ${response.error}</div>`;
+        } else {
+            console.log("DEBUG: Received response:", response.result);
+            try {
+                const jsonResponse = typeof response.result === 'string' ? JSON.parse(response.result) : response.result;
+                const formattedJson = JSON.stringify(jsonResponse, null, 2);
+                terminalOutput.innerHTML += `<div class="agent-response"><pre>${formattedJson}</pre></div>`;
+                speakResponse(jsonResponse.response || formattedJson);
+            } catch (e) {
+                console.log("DEBUG: Received response:", response.result);
+                terminalOutput.innerHTML += `<div class="agent-response">${response.result.replace(/\n/g, ' ').replace(/\s+/g, ' ')}</div>`;
+                speakResponse(response.result);
+            }
+        }
+        terminalOutput.scrollTop = terminalOutput.scrollHeight;
     }
-    terminalOutput.scrollTop = terminalOutput.scrollHeight;
-}
+
+    function speakResponse(text) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        synthesis.speak(utterance);
+    }
 
     closeTerminal.addEventListener('click', function() {
         terminalModal.style.display = 'none';
+        recognition.stop();
+        synthesis.cancel();
     });
 
     // Add a message listener for receiving updates from the background script
