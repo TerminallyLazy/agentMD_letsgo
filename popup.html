@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AgentMD</title>
+    <link rel="stylesheet" href="content.css">
+</head>
+<body>
+    <div id="popup">
+        <div class="fab-container">
+            <div class="fab-menu active">
+                <div class="nav-item" id="summarizeLabResults" title="AgentMD">
+                    <img src="icons/sparkle.svg" alt="Summarize Results">
+                </div>
+                <div class="nav-item" id="apiKey" title="API Key">
+                    <img src="icons/apikeyico.svg" alt="API Key">
+                </div>
+            </div>
+        </div>
+        <div id="terminalModal" class="modal">
+            <div class="modal-content">
+                <div class="mac-buttons">
+                    <div class="mac-button mac-button-red" id="closeTerminal"></div>
+                    <div class="mac-button mac-button-yellow"></div>
+                    <div class="mac-button mac-button-green"></div>
+                </div>
+                <div id="terminalOutput" class="terminal-output"></div>
+                <div class="terminal-input-container">
+                    <input type="text" id="terminalInput" class="terminal-input" placeholder="Enter a command...">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
