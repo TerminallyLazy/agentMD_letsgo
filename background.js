@@ -1,3 +1,78 @@
+import { getClientId } from './config.js';
+
+// OAuth2 configuration
+const CLIENT_ID = getClientId();
+const REDIRECT_URL = chrome.identity.getRedirectURL();
+const SCOPES = ['https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'];
+
+// Function to get a new access token
+function getAccessToken(interactive = false) {
+  return new Promise((resolve, reject) => {
+    chrome.identity.getAuthToken({ interactive: interactive }, function(token) {
+      if (chrome.runtime.lastError) {
+        console.error('Error getting auth token:', chrome.runtime.lastError);
+        reject(chrome.runtime.lastError);
+      } else {
+        storeToken(token);
+        resolve(token);
+      }
+    });
+  });
+}
+
+// Function to store the token securely
+function storeToken(token) {
+  chrome.storage.sync.set({ 'oauth2_token': token }, function() {
+    if (chrome.runtime.lastError) {
+      console.error('Error storing token:', chrome.runtime.lastError);
+    } else {
+      console.log('Token stored successfully');
+    }
+  });
+}
+
+// Function to check if the token is expired
+function isTokenExpired(token) {
+  return new Promise((resolve) => {
+    chrome.identity.getTokenInfo(token, function(tokenInfo) {
+      if (chrome.runtime.lastError) {
+        console.warn('Error checking token expiration:', chrome.runtime.lastError);
+        resolve(true); // Assume expired if there's an error
+      } else {
+        const expiresIn = tokenInfo.expiresIn || 0;
+        resolve(expiresIn <= 0);
+      }
+    });
+  });
+}
+
+// Function to refresh the access token
+async function refreshToken() {
+  try {
+    const oldToken = await getStoredToken();
+    await chrome.identity.removeCachedAuthToken({ token: oldToken });
+    const newToken = await getAccessToken(false);
+    return newToken;
+  } catch (error) {
+    console.error('Error refreshing token:', error);
+    return null;
+  }
+}
+
+// Function to get the stored access token
+function getStoredToken() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get('oauth2_token', function(result) {
+      if (chrome.runtime.lastError) {
+        console.error('Error retrieving stored token:', chrome.runtime.lastError);
+        resolve(null);
+      } else {
+        resolve(result.oauth2_token || null);
+      }
+    });
+  });
+}
+
 // Initialize the extension
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
@@ -57,6 +132,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: true });
       }
     });
+    return true;
+  } else if (request.action === 'startAuth') {
+    getAccessToken(true)
+      .then(token => sendResponse({ token: token }))
+      .catch(error => sendResponse({ error: error.message }));
+    return true;
+  } else if (request.action === 'getToken') {
+    getStoredToken()
+      .then(async token => {
+        if (token && await isTokenExpired(token)) {
+          token = await refreshToken();
+        }
+        sendResponse({ token: token });
+      })
+      .catch(error => sendResponse({ error: error.message }));
     return true;
   }
 });
