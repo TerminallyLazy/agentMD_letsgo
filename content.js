@@ -1,3 +1,4 @@
+console.log('InboxMD AI Agent content script starting to load');
 console.log('InboxMD AI Agent content script loaded');
 
 // Function to check if we're on the Gmail sign-in page
